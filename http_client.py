@@ -1,5 +1,25 @@
 import requests
 from typing import Optional, Dict, Any, Union
+import time
+
+
+def get_with_retries(url: str, params: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, str]] = None, timeout: int = 10, retries: int = 3) -> Optional[requests.Response]:
+    for attempt in range(retries):
+        try:
+            response = requests.get(url, params=params, headers=headers, timeout=timeout)
+            if response.status_code == 429 or (500 <= response.status_code < 600):
+                if attempt < retries - 1:
+                    backoff_time = 2 ** attempt
+                    time.sleep(backoff_time)
+                continue
+            response.raise_for_status()
+            return response
+        except requests.exceptions.RequestException as e:
+            if attempt == retries - 1:
+                return None
+            backoff_time = 2 ** attempt
+            time.sleep(backoff_time)
+    return None
 
 
 def get(url: str, params: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, str]] = None, timeout: int = 10) -> Optional[requests.Response]:
@@ -15,12 +35,7 @@ def get(url: str, params: Optional[Dict[str, Any]] = None, headers: Optional[Dic
     Returns:
         Response объект или None в случае ошибки
     """
-    try:
-        response = requests.get(url, params=params, headers=headers, timeout=timeout)
-        response.raise_for_status()  # Базовая проверка статуса
-        return response
-    except requests.exceptions.RequestException:
-        return None
+    return get_with_retries(url, params=params, headers=headers, timeout=timeout)
 
 
 def post(url: str, data: Optional[Dict[str, Any]] = None, json_data: Optional[Dict[str, Any]] = None, 
